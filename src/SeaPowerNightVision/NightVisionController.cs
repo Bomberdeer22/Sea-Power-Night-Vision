@@ -31,6 +31,8 @@ namespace SeaPowerNightVision
             _settings = NightVisionPlugin.Settings;
             _lightBooster = new SceneLightBooster(_settings);
 
+            NightVisionPlugin.Log.LogInfo("Night vision controller is running and listening for hotkeys.");
+
             if (_settings.EnabledOnStart.Value)
             {
                 SetActive(true, instant: true);
@@ -118,14 +120,14 @@ namespace SeaPowerNightVision
                 return false;
             }
 
-            if (!Input.GetKeyDown(shortcut.MainKey))
+            if (!InputBridge.GetKeyDown(shortcut.MainKey))
             {
                 return false;
             }
 
             foreach (var modifier in shortcut.Modifiers)
             {
-                if (!Input.GetKey(modifier))
+                if (!InputBridge.GetKey(modifier))
                 {
                     return false;
                 }

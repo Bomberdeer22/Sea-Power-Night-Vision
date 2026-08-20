@@ -10,7 +10,6 @@ namespace SeaPowerNightVision
     /// night vision state, hotkeys and rendering.
     /// </summary>
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-    [BepInProcess("Sea Power.exe")]
     public class NightVisionPlugin : BaseUnityPlugin
     {
         public const string PluginGuid = "io.github.bomberdeer22.seapower.nightvision";
@@ -29,6 +28,7 @@ namespace SeaPowerNightVision
             Settings = new NightVisionSettings(Config);
             Bootstrap();
             Log.LogInfo($"{PluginName} {PluginVersion} loaded. Toggle with {Settings.ToggleKey.Value}.");
+            LogDiagnostics();
         }
 
         private void OnDestroy()
@@ -37,6 +37,26 @@ namespace SeaPowerNightVision
             {
                 Destroy(_hostObject);
                 _hostObject = null;
+            }
+        }
+
+        /// <summary>
+        /// Dumps the handful of facts needed to diagnose "the mod does nothing" reports.
+        /// </summary>
+        private static void LogDiagnostics()
+        {
+            try
+            {
+                var pipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+                Log.LogInfo($"Unity {Application.unityVersion} | render pipeline: " +
+                            (pipeline == null ? "Built-in" : pipeline.GetType().Name) +
+                            $" | input backend: {InputBridge.BackendName}");
+                Log.LogInfo($"Hotkeys -> toggle {Settings.ToggleKey.Value}, cycle {Settings.CycleModeKey.Value}, " +
+                            $"gain {Settings.GainUpKey.Value}/{Settings.GainDownKey.Value}");
+            }
+            catch (System.Exception e)
+            {
+                Log.LogWarning("Diagnostics failed: " + e);
             }
         }
 
