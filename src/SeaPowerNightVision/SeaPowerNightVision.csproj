@@ -1,12 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <!--
+      net472 matches the Unity Mono runtime the game uses.
+
+      The project is deliberately restore-free: it references the base class libraries that
+      Unity ships in the game's Managed folder instead of pulling reference assemblies from
+      NuGet. That means it builds on a machine with no network access (and avoids NU1100
+      "unable to resolve NETStandard.Library" errors).
+    -->
+    <TargetFramework>net472</TargetFramework>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <AssemblyName>SeaPowerNightVision</AssemblyName>
     <RootNamespace>SeaPowerNightVision</RootNamespace>
     <Version>1.0.0</Version>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <NoStdLib>true</NoStdLib>
     <DebugType>portable</DebugType>
     <NoWarn>$(NoWarn);CS0649</NoWarn>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
@@ -39,6 +51,24 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Base class libraries, taken from Unity's own Mono profile in the game folder. -->
+    <Reference Include="mscorlib">
+      <HintPath>$(ManagedDir)\mscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System">
+      <HintPath>$(ManagedDir)\System.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Core">
+      <HintPath>$(ManagedDir)\System.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="netstandard" Condition="Exists('$(ManagedDir)\netstandard.dll')">
+      <HintPath>$(ManagedDir)\netstandard.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="BepInEx">
       <HintPath>$(BepInExCoreDir)\BepInEx.dll</HintPath>
       <Private>false</Private>
