@@ -149,7 +149,14 @@ namespace SeaPowerNightVision
                 known.Add(state.Light);
             }
 
-            foreach (var light in Object.FindObjectsOfType<Light>())
+            // FindObjectsOfType is flagged obsolete in newer Unity versions but still works and
+            // keeps the mod compatible across game updates; FindObjectsByType does not exist in
+            // older runtimes.
+#pragma warning disable CS0618
+            var sceneLights = Object.FindObjectsOfType<Light>();
+#pragma warning restore CS0618
+
+            foreach (var light in sceneLights)
             {
                 if (light == null || known.Contains(light))
                 {

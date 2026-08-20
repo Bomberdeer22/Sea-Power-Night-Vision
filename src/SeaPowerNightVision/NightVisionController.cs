@@ -14,6 +14,7 @@ namespace SeaPowerNightVision
         private SceneLightBooster _lightBooster;
 
         private readonly List<NightVisionScreenEffect> _effects = new List<NightVisionScreenEffect>();
+        private GUIStyle _indicatorStyle;
         private float _nextCameraScan;
         private float _nextLightScan;
         private bool _autoState;
@@ -361,15 +362,19 @@ namespace SeaPowerNightVision
             var previous = GUI.color;
             GUI.color = new Color(tint.r, tint.g, tint.b, Mathf.Clamp01(Weight) * 0.85f);
 
-            var label = $"NVG  {_settings.Mode.Value}  x{_settings.Gain.Value:0.0}";
-            var style = new GUIStyle(GUI.skin.label)
+            // GUIStyle instances may only be created inside OnGUI, so build it once and cache it.
+            if (_indicatorStyle == null)
             {
-                fontSize = 14,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.UpperLeft
-            };
+                _indicatorStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 14,
+                    fontStyle = FontStyle.Bold,
+                    alignment = TextAnchor.UpperLeft
+                };
+            }
 
-            GUI.Label(new Rect(14f, Screen.height - 30f, 400f, 24f), label, style);
+            var label = $"NVG  {_settings.Mode.Value}  x{_settings.Gain.Value:0.0}";
+            GUI.Label(new Rect(14f, Screen.height - 30f, 400f, 24f), label, _indicatorStyle);
             GUI.color = previous;
         }
     }
