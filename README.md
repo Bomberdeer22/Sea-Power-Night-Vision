@@ -66,10 +66,20 @@ project references the game's `Managed` DLLs and `BepInEx/core` directly — not
 
 Windows:
 
+```bat
+build.cmd                                                     :: auto-detects the Steam install
+build.cmd -GameDir "D:\SteamLibrary\steamapps\common\Sea Power"
+build.cmd -AnchorChain                                        :: + Steam Workshop entry point
+```
+
+`build.cmd` is just a wrapper around `build.ps1`. If you prefer to call PowerShell directly and
+hit *"cannot be loaded... is not digitally signed"*, that is Windows blocking downloaded scripts —
+use either of these:
+
 ```powershell
-.\build.ps1                                                   # auto-detects the Steam install
-.\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Sea Power"
-.\build.ps1 -AnchorChain                                      # + Steam Workshop entry point
+powershell -ExecutionPolicy Bypass -File .\build.ps1          # one-off, nothing is changed
+Unblock-File .\build.ps1                                      # or clear the download flag once
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned           # ...and allow local scripts
 ```
 
 Linux / macOS / WSL:
