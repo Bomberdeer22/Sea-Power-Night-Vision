@@ -7,3 +7,5 @@ obj/
 dist/
 *.dll
 !workshop/**/*.dll
+
+build-log.txt
