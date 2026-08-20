@@ -167,7 +167,7 @@ Please send that log if you want help fixing it.
 
 Write-Section "Result"
 
-$dll = Join-Path $scriptDir "src\SeaPowerNightVision\bin\$Configuration\net472\SeaPowerNightVision.dll"
+$dll = Join-Path $scriptDir "src\SeaPowerNightVision\bin\$Configuration\netstandard2.0\SeaPowerNightVision.dll"
 if (Test-Path $dll) {
     Write-Host "Built    : $dll"
 }

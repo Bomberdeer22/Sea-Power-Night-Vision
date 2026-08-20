@@ -2,23 +2,36 @@
 
   <PropertyGroup>
     <!--
-      net472 matches the Unity Mono runtime the game uses.
+      This project is deliberately restore-free and targeting-pack-free.
 
-      The project is deliberately restore-free: it references the base class libraries that
-      Unity ships in the game's Managed folder instead of pulling reference assemblies from
-      NuGet. That means it builds on a machine with no network access (and avoids NU1100
-      "unable to resolve NETStandard.Library" errors).
+      * It compiles against the base class libraries Unity ships in the game's Managed folder
+        (mscorlib/System/System.Core/netstandard), which are exactly the assemblies the game
+        will run it against.
+      * DisableImplicitFrameworkReferences stops the SDK adding an implicit NETStandard.Library
+        package reference (NU1100 when NuGet is unreachable).
+      * netstandard2.0 is used rather than net472 purely because .NETFramework target
+        frameworks make MSBuild demand a Developer Pack / targeting pack that isn't installed
+        on most machines (MSB3644). The emitted IL is loadable by the game's Mono runtime
+        either way.
+
+      Net result: it builds offline, with nothing installed but the .NET SDK.
     -->
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
     <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <NoStdLib>true</NoStdLib>
+    <NoConfig>true</NoConfig>
+    <ImplicitlyExpandDesignTimeFacades>false</ImplicitlyExpandDesignTimeFacades>
+    <AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences>
+    <!-- Belt and braces: keeps MSB3644 quiet if anything still asks for reference assemblies. -->
+    <_TargetFrameworkDirectories>$(MSBuildThisFileDirectory)</_TargetFrameworkDirectories>
+    <_FullFrameworkReferenceAssemblyPaths>$(MSBuildThisFileDirectory)</_FullFrameworkReferenceAssemblyPaths>
     <AssemblyName>SeaPowerNightVision</AssemblyName>
     <RootNamespace>SeaPowerNightVision</RootNamespace>
     <Version>1.0.0</Version>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
-    <NoStdLib>true</NoStdLib>
     <DebugType>portable</DebugType>
     <NoWarn>$(NoWarn);CS0649</NoWarn>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>

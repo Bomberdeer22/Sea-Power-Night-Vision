@@ -16,4 +16,4 @@ dotnet build src/SeaPowerNightVision/SeaPowerNightVision.csproj \
     /p:GameDir="$GAME_DIR"
 
 echo
-echo "Output: src/SeaPowerNightVision/bin/$CONFIG/net472/SeaPowerNightVision.dll"
+echo "Output: src/SeaPowerNightVision/bin/$CONFIG/netstandard2.0/SeaPowerNightVision.dll"
