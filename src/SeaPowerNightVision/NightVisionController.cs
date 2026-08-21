@@ -158,6 +158,10 @@ namespace SeaPowerNightVision
                 _previousLockMode = Cursor.lockState;
                 _previousCursorVisible = Cursor.visible;
                 _cursorOverridden = true;
+
+                NightVisionPlugin.Log.LogInfo(
+                    $"Settings panel opened. Cursor was lockState={_previousLockMode}, visible={_previousCursorVisible}, " +
+                    $"mouse at {Input.mousePosition}. Releasing it so the panel can be clicked.");
             }
 
             if (_ui.Visible)

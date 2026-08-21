@@ -195,6 +195,11 @@ namespace SeaPowerNightVision
 
             GUILayout.Label($"Toggle {_settings.ToggleKey.Value} · cycle {_settings.CycleModeKey.Value} · this panel {_settings.SettingsWindowKey.Value}", _labelStyle);
 
+            if (_settings.VerboseLogging.Value && Event.current.type == EventType.Repaint)
+            {
+                GUILayout.Label($"mouse {Input.mousePosition} · cursor {Cursor.lockState}", _labelStyle);
+            }
+
             GUI.DragWindow(new Rect(0f, 0f, 10000f, 20f));
         }
 
