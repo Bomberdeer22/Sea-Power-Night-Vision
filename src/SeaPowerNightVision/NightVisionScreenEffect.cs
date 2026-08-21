@@ -1,20 +1,23 @@
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace SeaPowerNightVision
 {
     /// <summary>
-    /// Draws the image-intensifier look straight onto the camera's framebuffer using
-    /// immediate-mode GL and Unity's built-in <c>Hidden/Internal-Colored</c> shader.
+    /// A genuine camera image effect for the built-in render pipeline.
     /// <para>
-    /// No custom shader or asset bundle is needed, which keeps the mod a single DLL and
-    /// makes it robust against game updates. The effect is composed from four blended
-    /// full-screen passes: gain (multiply), shadow lift (additive), phosphor tint
-    /// (modulate) and the optional tube artefacts (vignette / scanlines / grain).
+    /// This is not an overlay drawn over the finished frame. Unity calls
+    /// <see cref="OnRenderImage"/> as part of the camera's own rendering, handing over the scene
+    /// colour buffer before anything else is composited, so the filter is applied to the 3D image
+    /// exactly like the game's own effects would be — and screen-space UI, which is drawn after
+    /// the cameras, is left completely untouched.
     /// </para>
     /// <para>
-    /// Because this runs at the end of camera rendering, screen-space overlay UI is drawn
-    /// afterwards and stays perfectly readable.
+    /// Two quality paths. If the optional shader is present (see <see cref="NightVisionShaders"/>)
+    /// the whole thing is done in one blit with real luminance extraction, phosphor tint, gamma,
+    /// halation, vignette, scanlines and animated grain. Otherwise it falls back to fixed-function
+    /// blend passes with the always-available <c>Hidden/Internal-Colored</c> shader: gain
+    /// (multiply), shadow lift (add), tint (modulate) and the tube artefacts. The fallback cannot
+    /// mix colour channels, so its tint is per-channel rather than true monochrome.
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
@@ -23,8 +26,9 @@ namespace SeaPowerNightVision
         private const int MaxGainPasses = 4;
 
         private NightVisionSettings _settings;
-        private Material _material;
-        private bool _srpMode;
+        private Material _blendMaterial;
+        private Material _shaderMaterial;
+        private bool _shaderChecked;
         private bool _broken;
         private float _noisePhase;
 
@@ -33,80 +37,104 @@ namespace SeaPowerNightVision
         /// <summary>0..1 fade weight, driven by the owning filter.</summary>
         public float Weight { get; set; }
 
+        /// <summary>True when the high-quality shader path is in use.</summary>
+        public bool UsingShader => _shaderMaterial != null;
+
         internal void Bind(NightVisionSettings settings)
         {
             _settings = settings;
             TargetCamera = GetComponent<Camera>();
         }
 
-        private void OnEnable()
-        {
-            if (TargetCamera == null)
-            {
-                TargetCamera = GetComponent<Camera>();
-            }
-
-            _srpMode = GraphicsSettings.currentRenderPipeline != null;
-
-            if (_srpMode)
-            {
-                RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
-            }
-        }
-
-        private void OnDisable()
-        {
-            if (_srpMode)
-            {
-                RenderPipelineManager.endCameraRendering -= OnEndCameraRendering;
-            }
-        }
-
         private void OnDestroy()
         {
-            if (_material != null)
+            if (_blendMaterial != null)
             {
-                DestroyImmediate(_material);
-                _material = null;
+                DestroyImmediate(_blendMaterial);
+                _blendMaterial = null;
+            }
+
+            if (_shaderMaterial != null)
+            {
+                DestroyImmediate(_shaderMaterial);
+                _shaderMaterial = null;
             }
         }
 
-        // Built-in render pipeline path.
-        private void OnPostRender()
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            if (!_srpMode)
-            {
-                Render();
-            }
-        }
-
-        // Scriptable render pipeline path (URP/HDRP), in case the game ever moves to one.
-        private void OnEndCameraRendering(ScriptableRenderContext context, Camera camera)
-        {
-            if (camera == TargetCamera)
-            {
-                Render();
-            }
-        }
-
-        private void Render()
-        {
-            if (_broken || _settings == null)
-            {
-                return;
-            }
-
             var weight = Mathf.Clamp01(Weight);
-            if (weight <= 0.001f)
+
+            if (_broken || _settings == null || weight <= 0.001f)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            EnsureShaderMaterial();
+
+            if (_shaderMaterial != null)
+            {
+                RenderWithShader(source, destination, weight);
+                return;
+            }
+
+            // Fixed-function path: copy the frame through, then composite onto it.
+            Graphics.Blit(source, destination);
+
+            if (!EnsureBlendMaterial())
             {
                 return;
             }
 
-            if (!EnsureMaterial())
+            var previous = RenderTexture.active;
+            RenderTexture.active = destination;
+
+            var width = destination != null ? destination.width : Screen.width;
+            var height = destination != null ? destination.height : Screen.height;
+            RenderPasses(weight, width, height);
+
+            RenderTexture.active = previous;
+        }
+
+        private void EnsureShaderMaterial()
+        {
+            if (_shaderChecked)
             {
                 return;
             }
 
+            _shaderChecked = true;
+
+            var shader = NightVisionShaders.Get();
+            if (shader != null)
+            {
+                _shaderMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            }
+        }
+
+        private void RenderWithShader(RenderTexture source, RenderTexture destination, float weight)
+        {
+            var tint = _settings.GetTintColor();
+
+            _shaderMaterial.SetFloat("_Weight", weight);
+            _shaderMaterial.SetFloat("_Gain", Mathf.Max(1f, _settings.Gain.Value * _settings.GetModeGainScale()));
+            _shaderMaterial.SetFloat("_Lift", _settings.ShadowLift.Value);
+            _shaderMaterial.SetFloat("_Contrast", 1f + _settings.Contrast.Value / 100f);
+            _shaderMaterial.SetFloat("_TintStrength", _settings.GetEffectiveTintStrength());
+            _shaderMaterial.SetColor("_TintColor", tint);
+            _shaderMaterial.SetFloat("_Glow", _settings.TubeGlow.Value);
+            _shaderMaterial.SetFloat("_Vignette", _settings.Vignette.Value ? _settings.VignetteStrength.Value : 0f);
+            _shaderMaterial.SetFloat("_Noise", _settings.SensorNoise.Value);
+            _shaderMaterial.SetFloat("_Scanlines", _settings.Scanlines.Value ? _settings.ScanlineStrength.Value : 0f);
+            _shaderMaterial.SetFloat("_ScanlineSpacing", Mathf.Max(2, _settings.ScanlineSpacing.Value));
+            _shaderMaterial.SetFloat("_Time01", Time.unscaledTime);
+
+            Graphics.Blit(source, destination, _shaderMaterial);
+        }
+
+        private void RenderPasses(float weight, int width, int height)
+        {
             var gain = Mathf.Lerp(1f, Mathf.Max(1f, _settings.Gain.Value * _settings.GetModeGainScale()), weight);
             var tint = _settings.GetTintColor();
 
@@ -121,18 +149,18 @@ namespace SeaPowerNightVision
 
             if (_settings.Scanlines.Value)
             {
-                DrawScanlines(_settings.ScanlineStrength.Value * weight, _settings.ScanlineSpacing.Value);
+                DrawScanlines(_settings.ScanlineStrength.Value * weight, _settings.ScanlineSpacing.Value, width, height);
             }
 
             if (_settings.SensorNoise.Value > 0.001f)
             {
-                DrawNoise(tint, _settings.SensorNoise.Value * weight);
+                DrawNoise(tint, _settings.SensorNoise.Value * weight, width, height);
             }
         }
 
-        private bool EnsureMaterial()
+        private bool EnsureBlendMaterial()
         {
-            if (_material != null)
+            if (_blendMaterial != null)
             {
                 return true;
             }
@@ -142,23 +170,23 @@ namespace SeaPowerNightVision
             {
                 _broken = true;
                 NightVisionPlugin.Log.LogError(
-                    "Could not find the built-in 'Hidden/Internal-Colored' shader; the screen effect is disabled. " +
+                    "Could not find the built-in 'Hidden/Internal-Colored' shader; the image effect is disabled. " +
                     "World lighting boost still works.");
                 return false;
             }
 
-            _material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-            _material.SetInt("_ZWrite", 0);
-            _material.SetInt("_ZTest", (int)CompareFunction.Always);
-            _material.SetInt("_Cull", (int)CullMode.Off);
+            _blendMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            _blendMaterial.SetInt("_ZWrite", 0);
+            _blendMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+            _blendMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             return true;
         }
 
-        private void SetBlend(BlendMode source, BlendMode destination)
+        private void SetBlend(UnityEngine.Rendering.BlendMode source, UnityEngine.Rendering.BlendMode destination)
         {
-            _material.SetInt("_SrcBlend", (int)source);
-            _material.SetInt("_DstBlend", (int)destination);
-            _material.SetPass(0);
+            _blendMaterial.SetInt("_SrcBlend", (int)source);
+            _blendMaterial.SetInt("_DstBlend", (int)destination);
+            _blendMaterial.SetPass(0);
         }
 
         /// <summary>
@@ -176,7 +204,7 @@ namespace SeaPowerNightVision
 
                 GL.PushMatrix();
                 GL.LoadOrtho();
-                SetBlend(BlendMode.DstColor, BlendMode.One);
+                SetBlend(UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.One);
                 FullScreenQuad(new Color(c, c, c, 1f));
                 GL.PopMatrix();
 
@@ -194,7 +222,7 @@ namespace SeaPowerNightVision
 
             GL.PushMatrix();
             GL.LoadOrtho();
-            SetBlend(BlendMode.One, BlendMode.One);
+            SetBlend(UnityEngine.Rendering.BlendMode.One, UnityEngine.Rendering.BlendMode.One);
             FullScreenQuad(new Color(tint.r * amount, tint.g * amount, tint.b * amount, 1f));
             GL.PopMatrix();
         }
@@ -211,7 +239,7 @@ namespace SeaPowerNightVision
 
             GL.PushMatrix();
             GL.LoadOrtho();
-            SetBlend(BlendMode.Zero, BlendMode.SrcColor);
+            SetBlend(UnityEngine.Rendering.BlendMode.Zero, UnityEngine.Rendering.BlendMode.SrcColor);
             FullScreenQuad(new Color(c.r, c.g, c.b, 1f));
             GL.PopMatrix();
         }
@@ -229,40 +257,34 @@ namespace SeaPowerNightVision
 
             GL.PushMatrix();
             GL.LoadOrtho();
-            SetBlend(BlendMode.SrcAlpha, BlendMode.OneMinusSrcAlpha);
+            SetBlend(UnityEngine.Rendering.BlendMode.SrcAlpha, UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
             GL.Begin(GL.QUADS);
 
-            // Left
             GradientQuad(0f, 0f, band, 1f, outer, inner, horizontal: true);
-            // Right
             GradientQuad(1f - band, 0f, 1f, 1f, inner, outer, horizontal: true);
-            // Bottom
             GradientQuad(0f, 0f, 1f, band, outer, inner, horizontal: false);
-            // Top
             GradientQuad(0f, 1f - band, 1f, 1f, inner, outer, horizontal: false);
 
             GL.End();
             GL.PopMatrix();
         }
 
-        private void DrawScanlines(float strength, int spacing)
+        private void DrawScanlines(float strength, int spacing, int width, int height)
         {
             if (strength <= 0.001f)
             {
                 return;
             }
 
-            var height = Screen.height;
             var step = Mathf.Max(2, spacing);
             var color = new Color(0f, 0f, 0f, Mathf.Clamp01(strength));
 
             GL.PushMatrix();
-            GL.LoadPixelMatrix();
-            SetBlend(BlendMode.SrcAlpha, BlendMode.OneMinusSrcAlpha);
+            GL.LoadPixelMatrix(0f, width, 0f, height);
+            SetBlend(UnityEngine.Rendering.BlendMode.SrcAlpha, UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
             GL.Begin(GL.QUADS);
             GL.Color(color);
 
-            var width = Screen.width;
             for (var y = 0; y < height; y += step)
             {
                 GL.Vertex3(0f, y, 0f);
@@ -275,7 +297,7 @@ namespace SeaPowerNightVision
             GL.PopMatrix();
         }
 
-        private void DrawNoise(Color tint, float amount)
+        private void DrawNoise(Color tint, float amount, int width, int height)
         {
             var count = Mathf.RoundToInt(Mathf.Clamp01(amount) * 1500f);
             if (count <= 0)
@@ -285,13 +307,11 @@ namespace SeaPowerNightVision
 
             _noisePhase += Time.unscaledDeltaTime;
             var random = new System.Random(unchecked((int)(_noisePhase * 1000f)) ^ Time.frameCount);
-            var width = Screen.width;
-            var height = Screen.height;
             var brightness = 0.10f + 0.25f * amount;
 
             GL.PushMatrix();
-            GL.LoadPixelMatrix();
-            SetBlend(BlendMode.One, BlendMode.One);
+            GL.LoadPixelMatrix(0f, width, 0f, height);
+            SetBlend(UnityEngine.Rendering.BlendMode.One, UnityEngine.Rendering.BlendMode.One);
             GL.Begin(GL.QUADS);
 
             for (var i = 0; i < count; i++)

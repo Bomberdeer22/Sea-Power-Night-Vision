@@ -29,7 +29,7 @@
     <_FullFrameworkReferenceAssemblyPaths>$(MSBuildThisFileDirectory)</_FullFrameworkReferenceAssemblyPaths>
     <AssemblyName>SeaPowerNightVision</AssemblyName>
     <RootNamespace>SeaPowerNightVision</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>

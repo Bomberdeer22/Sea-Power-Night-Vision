@@ -3,6 +3,23 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-08-21
+
+### Changed
+- The built-in-pipeline path is now a **real camera image effect** (`OnRenderImage`) rather than
+  a composite drawn after the camera finished. Unity runs it as part of the camera's rendering on
+  the scene colour buffer, so it is a genuine in-engine filter and screen-space UI is untouched.
+- Confirmed Sea Power runs Unity 6000.0.67 on the **built-in pipeline with no post-processing
+  package**, so the volume and PPv2 backends will never apply there; the image effect is the
+  primary path and is no longer described as a fallback.
+
+### Added
+- Optional full-quality shader (`unity/NightVision.shader`) with true luminance extraction,
+  phosphor tint, halation, scanlines, grain and vignette. Fixed-function blending cannot mix
+  colour channels, so this is the only way to get real monochrome-plus-phosphor. The mod loads
+  `nightvision.bundle` from its own folder automatically when present.
+- Unity editor script and instructions for building that bundle (`unity/README.md`).
+
 ## [1.1.0] - 2026-08-21
 
 ### Changed

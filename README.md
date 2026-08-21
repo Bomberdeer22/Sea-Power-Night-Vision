@@ -35,14 +35,27 @@ your monitor brightness:
 
 The mod picks the best available path at startup and logs which one it chose:
 
-1. **Volume post-processing** (URP/HDRP) — the proper one, described above.
-2. **Post Processing Stack v2** — same approach for built-in-pipeline games using the legacy package.
-3. **GL overlay** — a last-resort composite drawn at the end of the *world* camera's rendering
-   (deliberately the scene camera, not the UI camera, so the interface still stays on top).
+1. **Volume post-processing** (URP/HDRP) — drives the pipeline's stock grading overrides.
+2. **Post Processing Stack v2** — same approach for games using the legacy package.
+3. **Built-in pipeline image effect** — what Sea Power actually uses. Installs a real
+   `OnRenderImage` effect on the world camera, so Unity runs it as part of that camera's rendering
+   on the scene colour buffer. Screen-space UI is composited afterwards and is untouched.
 
 The first two are found by reflection, so the mod never has to reference URP/HDRP/PPv2 at compile
 time and stays a single dependency-free DLL. Force a specific one with `Backend` in the config if
 you ever need to.
+
+### A note on the built-in pipeline path
+
+Sea Power ships the built-in render pipeline with **no post-processing package**, so there is no
+grading stack to drive and no way to compile a shader at runtime. The image effect therefore
+composites with fixed-function blending by default: gain, shadow lift, phosphor tint, vignette,
+scanlines and grain all work, but blending cannot mix colour channels, so the tint is per-channel
+rather than true monochrome.
+
+For the real thing — luminance extraction, halation, the lot — build the optional shader bundle
+once and drop it next to the DLL. It takes about five minutes and needs Unity 6000.0.x:
+see [unity/README.md](unity/README.md). The mod detects and uses it automatically.
 
 Everything the mod changes is captured before it is touched and restored on toggle-off, on scene
 change and on unload. If the game's own time-of-day lighting moves a light while night vision is
@@ -109,6 +122,7 @@ On a successful build the DLL is copied into `BepInEx/plugins/SeaPowerNightVisio
 ### Source layout
 
 ```
+unity/                        optional shader + Unity project files for the full-quality look
 src/SeaPowerNightVision/
   NightVisionPlugin.cs        BepInEx entry point, creates the persistent controller
   NightVisionSettings.cs      every config entry + per-mode tint/gain presets
@@ -117,8 +131,9 @@ src/SeaPowerNightVision/
   INightVisionFilter.cs       the interface each rendering backend implements
   VolumeFilter.cs             URP/HDRP volume post-processing (the good path)
   PostProcessV2Filter.cs      legacy Post Processing Stack v2 path
-  OverlayFilter.cs            GL fallback, bound to the world camera only
-  NightVisionScreenEffect.cs  the GL composite used by the fallback
+  OverlayFilter.cs            built-in pipeline path; installs the image effect on the world camera
+  NightVisionScreenEffect.cs  the camera image effect (shader blit, or fixed-function passes)
+  NightVisionShaders.cs       finds the optional high-quality shader bundle
   SceneLightBooster.cs        ambient, light-intensity and fog amplification + exact restore
   Reflect.cs                  reflection helpers for driving the pipeline without referencing it
   InputBridge.cs              legacy Input / Input System compatibility for the hotkeys
@@ -208,9 +223,13 @@ SensorNoise = 0.25
 `Sea Power Night Vision 1.0.0 loaded`. If it is missing, BepInEx is not installed correctly
 (`BepInEx/` must sit next to `Sea Power.exe`) or the DLL is not under `BepInEx/plugins/`.
 
-**The tint bleeds onto the UI.** That means the mod fell back to the GL overlay backend. Open the
-settings panel: the bottom line tells you which backend is active, and the log says why the volume
-path was unavailable. Send me that line and I'll add support for whatever the game is using.
+**The tint bleeds onto the UI.** The filter runs on the world camera, so screen-space UI should
+never be affected. If some interface element *is* tinted, it is being drawn by the world camera
+itself — tell me which element and I'll add it to the exclusion logic.
+
+**The image is green but colours look odd rather than monochrome.** You're on the fixed-function
+path, which cannot mix colour channels. Build the optional shader bundle
+([unity/README.md](unity/README.md)) for true monochrome-plus-phosphor.
 
 **The world brightens but there is no tint at all.** No filter backend could start; only the
 lighting amplification is running. Raise `AmbientBoost` to compensate and check the log.

@@ -4,14 +4,18 @@ using UnityEngine;
 namespace SeaPowerNightVision
 {
     /// <summary>
-    /// Last-resort filter for games with no usable post-processing stack: composites the look
-    /// with immediate-mode GL at the end of the *world* camera's rendering.
+    /// Filter for the built-in render pipeline: installs a real camera image effect
+    /// (<c>OnRenderImage</c>) on the world camera.
     /// <para>
-    /// The camera choice is what keeps the interface clean. Rather than grabbing the
-    /// highest-depth camera (which is usually the UI camera, and painting over it is exactly the
-    /// "cheap overlay" problem), this deliberately targets the scene camera that renders first,
-    /// so anything drawn afterwards — UI cameras, screen-space overlay canvases — lands on top
-    /// of the effect untouched.
+    /// Unity runs image effects as part of the camera's rendering, on the scene colour buffer,
+    /// before anything else is composited — so this is a true in-engine filter rather than
+    /// something painted over the finished frame. Screen-space UI is drawn after the cameras and
+    /// is therefore untouched.
+    /// </para>
+    /// <para>
+    /// The camera choice matters just as much: targeting the highest-depth camera would grab the
+    /// UI camera and filter the interface, which is precisely the "cheap overlay" failure mode.
+    /// This deliberately picks the scene camera instead.
     /// </para>
     /// </summary>
     internal class OverlayFilter : INightVisionFilter
@@ -29,9 +33,9 @@ namespace SeaPowerNightVision
             _settings = settings;
         }
 
-        public string Name => "GL overlay (no post-processing stack found)";
+        public string Name { get; private set; } = "Built-in pipeline image effect";
 
-        public bool IsTruePostProcess => false;
+        public bool IsTruePostProcess => true;
 
         public bool TryInitialize()
         {
@@ -41,9 +45,22 @@ namespace SeaPowerNightVision
                 return false;
             }
 
-            NightVisionPlugin.Log.LogWarning(
-                "No post-processing stack was found, so night vision is falling back to a GL overlay. " +
-                "It is drawn on the world camera only, but a few UI elements rendered by that same camera may be tinted.");
+            if (NightVisionShaders.Get() != null)
+            {
+                Name = "Built-in pipeline image effect (shader)";
+                NightVisionPlugin.Log.LogInfo(
+                    "Night vision will run as a camera image effect using the full-quality shader.");
+            }
+            else
+            {
+                Name = "Built-in pipeline image effect (fixed-function)";
+                NightVisionPlugin.Log.LogInfo(
+                    "Night vision will run as a camera image effect on the world camera. " +
+                    "No night vision shader was found, so the fixed-function path is used: gain, tint, " +
+                    "vignette and grain all work, but the tint is per-channel rather than true monochrome. " +
+                    "Drop nightvision.bundle next to the DLL for the full-quality look (see unity/README.md).");
+            }
+
             return true;
         }
 
