@@ -34,6 +34,23 @@ your monitor brightness:
 | **A real post-process filter** | The mod injects a global `Volume` into the game's own render pipeline and drives the stock post-processing overrides: post-exposure (gain), saturation and colour filter (phosphor tint), contrast, bloom (halation around running lights and gunfire), vignette and film grain. This is the same machinery the game uses for its own grading, so it is applied to the rendered 3D scene **inside the pipeline, before the interface is composited** — the UI, labels and tactical map are physically untouched. Toggling fades the volume's weight, which is smooth and free. |
 | **Scene amplification** | Ambient light, sky/equator/ground ambient colours and scene light intensities are multiplied while the mode is on, and night haze/fog density is reduced. This reveals unlit hull surfaces, wakes and the horizon — real photons, not just brighter pixels. Very bright lights (muzzle flashes, explosions, > 8 intensity) are deliberately left alone so they don't blow out. |
 
+### Realism
+
+The filter models the behaviour of an image intensifier, not just its colour:
+
+| Effect | What it reproduces |
+| --- | --- |
+| **Automatic gain control** | Average scene brightness is measured on the GPU and gain is driven to hold a target output level. Attack is fast, release is four times slower — so gunfire or a flare clamps the tube down instantly and it recovers over seconds. `Gain` becomes the *maximum* gain. |
+| **Photon-limited noise** | Scintillation scaled by 1/sqrt(signal): dark areas boil, lit areas stay clean. Uniform grain doesn't do this, and it's the giveaway. |
+| **Halation** | Bright sources bleeding into their surroundings as the tube saturates locally. |
+| **Warm-up / collapse** | A surge to ~1.9x on switch-on settling over 0.7s, and a collapse ~3x faster than the fade-in on switch-off. |
+| **Phosphor persistence** | The motion smear when panning. Shader path only. |
+| **Fixed-pattern noise** | The faint hexagonal "chicken wire" of the fibre-optic bundle and microchannel plate. Shader path only. |
+| **Tube mask** | The objective's circular field of view. Authentic but it hides screen area, so it's off by default. |
+| **Phosphor colours** | P43 yellow-green for Gen-III, P45 for white phosphor. |
+
+Tune all of it live in the settings panel's *Realism* section, or in the `4b. Realism` config block.
+
 ### Filter backends
 
 The mod picks the best available path at startup and logs which one it chose:

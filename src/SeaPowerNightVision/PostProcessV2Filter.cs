@@ -23,6 +23,7 @@ namespace SeaPowerNightVision
         private object _bloom;
 
         private float _lastWeight = -1f;
+        private float _gainScale = 1f;
         private int _lastSettingsHash;
 
         public PostProcessV2Filter(NightVisionSettings settings)
@@ -121,8 +122,10 @@ namespace SeaPowerNightVision
             }
         }
 
-        public void Apply(float weight)
+        public void Apply(float weight, float gainScale)
         {
+            _gainScale = gainScale;
+
             if (_volume == null)
             {
                 return;
@@ -149,7 +152,7 @@ namespace SeaPowerNightVision
             var tint = _settings.GetTintColor();
             var tintStrength = _settings.GetEffectiveTintStrength();
             var gain = Mathf.Max(1f, _settings.Gain.Value * _settings.GetModeGainScale());
-            var exposureEv = Mathf.Log(gain, 2f) * 2f;
+            var exposureEv = Mathf.Log(Mathf.Max(1f, gain * _gainScale), 2f) * 2f;
 
             Reflect.SetParameter(_colorGrading, "postExposure", exposureEv);
             Reflect.SetParameter(_colorGrading, "contrast", _settings.Contrast.Value);

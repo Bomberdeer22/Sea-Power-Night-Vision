@@ -3,6 +3,27 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-08-21
+
+### Added — realism pass
+- **Automatic gain control.** The scene's average brightness is measured on the GPU every few
+  frames and the gain is driven to hold a target output brightness. Attack is fast and release is
+  four times slower, so a muzzle flash or a flare makes the tube clamp down instantly and recover
+  over seconds — the way real automatic brightness control behaves. With AGC on, `Gain` becomes the
+  *maximum* gain rather than a fixed multiplier.
+- **Photon-limited noise.** Scintillation now scales as 1/sqrt(signal), so shadows boil and lit
+  areas stay clean. Plain uniform grain doesn't behave this way, and this is the most recognisable
+  trait of a real intensifier.
+- **Warm-up and collapse.** Switching on surges to ~1.9x gain and settles over 0.7s; switching off
+  collapses about three times faster than it fades up.
+- **Halation** — bright sources bleeding into their surroundings as the tube saturates locally.
+- **Phosphor persistence** — the motion smear left behind when panning (shader path).
+- **Tube mask** — the objective's circular field of view, drawn as real geometry (off by default).
+- **Fixed-pattern noise** — the faint hexagonal "chicken wire" of the fibre-optic bundle and
+  microchannel plate (shader path).
+- Phosphor colours corrected to P43 (Gen-III yellow-green) and P45 (white).
+- All of the above are exposed in the settings panel under a new "Realism" section.
+
 ## [1.2.1] - 2026-08-21
 
 ### Fixed

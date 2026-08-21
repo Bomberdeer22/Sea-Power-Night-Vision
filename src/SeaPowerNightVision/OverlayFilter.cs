@@ -27,6 +27,7 @@ namespace SeaPowerNightVision
         private readonly List<NightVisionScreenEffect> _effects = new List<NightVisionScreenEffect>();
 
         private float _nextScan;
+        private float _gainScale = 1f;
 
         public OverlayFilter(NightVisionSettings settings)
         {
@@ -64,8 +65,10 @@ namespace SeaPowerNightVision
             return true;
         }
 
-        public void Apply(float weight)
+        public void Apply(float weight, float gainScale)
         {
+            _gainScale = gainScale;
+
             if (weight <= 0.001f)
             {
                 SetWeights(0f);
@@ -92,6 +95,7 @@ namespace SeaPowerNightVision
                 }
 
                 _effects[i].Weight = weight;
+                _effects[i].GainScale = _gainScale;
             }
         }
 

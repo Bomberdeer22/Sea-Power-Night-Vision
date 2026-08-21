@@ -17,6 +17,7 @@ namespace SeaPowerNightVision
         private bool _autoState;
         private bool _autoInitialised;
 
+        private float _warmUpTimer = -1f;
         private bool _cursorOverridden;
         private CursorLockMode _previousLockMode;
         private bool _previousCursorVisible;
@@ -120,7 +121,7 @@ namespace SeaPowerNightVision
 
             UpdateCursor();
 
-            _filter?.Apply(Weight);
+            _filter?.Apply(Weight, ComputeWarmUpGain());
 
             if (Weight <= 0.001f && !Active)
             {
@@ -263,10 +264,15 @@ namespace SeaPowerNightVision
 
             Active = active;
 
+            if (active && _settings.WarmUp.Value)
+            {
+                _warmUpTimer = 0f;
+            }
+
             if (instant || _settings.FadeSeconds.Value <= 0f)
             {
                 Weight = active ? 1f : 0f;
-                _filter?.Apply(Weight);
+                _filter?.Apply(Weight, ComputeWarmUpGain());
             }
 
             if (!active)
@@ -313,7 +319,31 @@ namespace SeaPowerNightVision
         public void ReloadFilter()
         {
             SelectFilter();
-            _filter?.Apply(Weight);
+            _filter?.Apply(Weight, 1f);
+        }
+
+        /// <summary>
+        /// Switching on a real intensifier is not instant: the tube surges bright as the automatic
+        /// brightness control catches up, then settles over roughly half a second.
+        /// </summary>
+        private float ComputeWarmUpGain()
+        {
+            if (!_settings.WarmUp.Value || _warmUpTimer < 0f)
+            {
+                return 1f;
+            }
+
+            const float duration = 0.7f;
+            _warmUpTimer += Time.unscaledDeltaTime;
+
+            if (_warmUpTimer >= duration)
+            {
+                _warmUpTimer = -1f;
+                return 1f;
+            }
+
+            var t = _warmUpTimer / duration;
+            return Mathf.Lerp(1.9f, 1f, Mathf.SmoothStep(0f, 1f, t));
         }
 
         private void UpdateWeight()
@@ -321,9 +351,16 @@ namespace SeaPowerNightVision
             var target = Active ? 1f : 0f;
             var fade = _settings.FadeSeconds.Value;
 
-            Weight = fade <= 0f
-                ? target
-                : Mathf.MoveTowards(Weight, target, Time.unscaledDeltaTime / fade);
+            if (fade <= 0f)
+            {
+                Weight = target;
+                return;
+            }
+
+            // Switching off collapses roughly three times faster than switching on, like a tube
+            // losing its high voltage.
+            var speed = Active ? 1f / fade : 3f / fade;
+            Weight = Mathf.MoveTowards(Weight, target, Time.unscaledDeltaTime * speed);
         }
 
         private void UpdateAutoMode()

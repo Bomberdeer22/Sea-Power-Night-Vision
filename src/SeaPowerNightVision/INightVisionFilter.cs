@@ -15,8 +15,11 @@ namespace SeaPowerNightVision
         /// <summary>Attempts to set the filter up. Returns false if the game doesn't support it.</summary>
         bool TryInitialize();
 
-        /// <summary>Called every frame with the current 0..1 fade weight.</summary>
-        void Apply(float weight);
+        /// <summary>
+        /// Called every frame with the current 0..1 fade weight and a transient gain multiplier
+        /// (used for the warm-up surge when the tubes are switched on).
+        /// </summary>
+        void Apply(float weight, float gainScale);
 
         /// <summary>Tears everything down and leaves the game exactly as it was.</summary>
         void Dispose();

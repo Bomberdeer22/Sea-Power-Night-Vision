@@ -118,10 +118,42 @@ namespace SeaPowerNightVision
 
             _rows.Add(new PanelRow
             {
+                Section = "Realism",
+                Label = "Auto-gain (AGC)",
+                GetToggle = () => _settings.AutoGain.Value,
+                SetToggle = v => _settings.AutoGain.Value = v
+            });
+
+            AddSlider(null, "Photon noise", () => _settings.PhotonNoise.Value, v => _settings.PhotonNoise.Value = v,
+                0f, 1f, 0.05f, "{0:P0}");
+            AddSlider(null, "Persistence", () => _settings.Persistence.Value, v => _settings.Persistence.Value = v,
+                0f, 0.8f, 0.05f, "{0:P0}");
+            AddSlider(null, "Halation", () => _settings.Halation.Value, v => _settings.Halation.Value = v,
+                0f, 2f, 0.05f, "{0:0.00}");
+
+            _rows.Add(new PanelRow
+            {
+                Label = "Tube mask (circular FOV)",
+                GetToggle = () => _settings.TubeMask.Value,
+                SetToggle = v => _settings.TubeMask.Value = v
+            });
+
+            AddSlider(null, "Tube radius", () => _settings.TubeRadius.Value, v => _settings.TubeRadius.Value = v,
+                0.4f, 1.2f, 0.02f, "{0:0.00}", () => _settings.TubeMask.Value);
+
+            _rows.Add(new PanelRow
+            {
                 Section = "Behaviour",
                 Label = "Auto on at night",
                 GetToggle = () => _settings.AutoEnableAtNight.Value,
                 SetToggle = v => _settings.AutoEnableAtNight.Value = v
+            });
+
+            _rows.Add(new PanelRow
+            {
+                Label = "Warm-up / collapse",
+                GetToggle = () => _settings.WarmUp.Value,
+                SetToggle = v => _settings.WarmUp.Value = v
             });
 
             _rows.Add(new PanelRow
@@ -431,6 +463,12 @@ namespace SeaPowerNightVision
             _settings.AmbientBoost.Value = (float)_settings.AmbientBoost.DefaultValue;
             _settings.LightBoost.Value = (float)_settings.LightBoost.DefaultValue;
             _settings.FogReduction.Value = (float)_settings.FogReduction.DefaultValue;
+            _settings.AutoGain.Value = (bool)_settings.AutoGain.DefaultValue;
+            _settings.PhotonNoise.Value = (float)_settings.PhotonNoise.DefaultValue;
+            _settings.Persistence.Value = (float)_settings.Persistence.DefaultValue;
+            _settings.Halation.Value = (float)_settings.Halation.DefaultValue;
+            _settings.TubeMask.Value = (bool)_settings.TubeMask.DefaultValue;
+            _settings.TubeRadius.Value = (float)_settings.TubeRadius.DefaultValue;
         }
 
         private static string Describe(NightVisionMode mode)

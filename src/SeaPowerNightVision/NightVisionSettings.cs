@@ -75,6 +75,16 @@ namespace SeaPowerNightVision
         public readonly ConfigEntry<int> ScanlineSpacing;
         public readonly ConfigEntry<float> SensorNoise;
 
+        public readonly ConfigEntry<bool> AutoGain;
+        public readonly ConfigEntry<float> AgcTarget;
+        public readonly ConfigEntry<float> AgcSpeed;
+        public readonly ConfigEntry<float> Persistence;
+        public readonly ConfigEntry<float> PhotonNoise;
+        public readonly ConfigEntry<float> Halation;
+        public readonly ConfigEntry<bool> TubeMask;
+        public readonly ConfigEntry<float> TubeRadius;
+        public readonly ConfigEntry<bool> WarmUp;
+
         public readonly ConfigEntry<bool> BoostSceneLighting;
         public readonly ConfigEntry<float> AmbientBoost;
         public readonly ConfigEntry<float> LightBoost;
@@ -178,6 +188,50 @@ namespace SeaPowerNightVision
                 new ConfigDescription("Amount of animated sensor grain. 0 disables it (best for performance).",
                     new AcceptableValueRange<float>(0f, 1f)));
 
+            const string realism = "4b. Realism";
+
+            AutoGain = config.Bind(realism, "AutoGain", true,
+                "Simulate the tube's automatic gain control. In darkness the intensifier runs at full gain; " +
+                "when something bright enters the field of view (gunfire, a flare, a searchlight) it backs off " +
+                "within a fraction of a second and recovers slowly, exactly like the real thing. " +
+                "With this on, the Gain setting becomes the MAXIMUM gain rather than a fixed multiplier.");
+
+            AgcTarget = config.Bind(realism, "AgcTargetBrightness", 0.18f,
+                new ConfigDescription("Screen brightness the AGC aims to hold.",
+                    new AcceptableValueRange<float>(0.05f, 0.5f)));
+
+            AgcSpeed = config.Bind(realism, "AgcSpeed", 3.0f,
+                new ConfigDescription("How quickly the AGC reacts. Real tubes clamp down fast and recover slowly; " +
+                                      "this controls the fast direction.",
+                    new AcceptableValueRange<float>(0.2f, 12f)));
+
+            Persistence = config.Bind(realism, "Persistence", 0.25f,
+                new ConfigDescription("Phosphor persistence: the smear left behind by moving objects. " +
+                                      "Requires the shader bundle.",
+                    new AcceptableValueRange<float>(0f, 0.8f)));
+
+            PhotonNoise = config.Bind(realism, "PhotonNoise", 0.35f,
+                new ConfigDescription("Photon-limited scintillation. Unlike plain film grain this scales with " +
+                                      "darkness — bright areas are clean, shadows boil — which is the single most " +
+                                      "recognisable trait of a real intensifier.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+
+            Halation = config.Bind(realism, "Halation", 0.6f,
+                new ConfigDescription("Blooming/halo around bright sources as the tube saturates locally.",
+                    new AcceptableValueRange<float>(0f, 2f)));
+
+            TubeMask = config.Bind(realism, "TubeMask", false,
+                "Mask the view to the tube's circular field of view. Authentic, but it hides part of the screen, " +
+                "so it is off by default.");
+
+            TubeRadius = config.Bind(realism, "TubeRadius", 0.88f,
+                new ConfigDescription("Radius of the tube circle, as a fraction of half the screen height.",
+                    new AcceptableValueRange<float>(0.4f, 1.2f)));
+
+            WarmUp = config.Bind(realism, "WarmUp", true,
+                "Reproduce the surge and settle when the tubes are switched on, and the quick collapse when " +
+                "they are switched off.");
+
             BoostSceneLighting = config.Bind(world, "BoostSceneLighting", true,
                 "Also raise the scene's ambient light and light intensities while active. " +
                 "This is what actually makes unlit hulls and the horizon readable, rather than just brightening black pixels.");
@@ -229,6 +283,12 @@ namespace SeaPowerNightVision
                 hash = hash * 31 + Vignette.Value.GetHashCode();
                 hash = hash * 31 + VignetteStrength.Value.GetHashCode();
                 hash = hash * 31 + SensorNoise.Value.GetHashCode();
+                hash = hash * 31 + AutoGain.Value.GetHashCode();
+                hash = hash * 31 + Persistence.Value.GetHashCode();
+                hash = hash * 31 + PhotonNoise.Value.GetHashCode();
+                hash = hash * 31 + Halation.Value.GetHashCode();
+                hash = hash * 31 + TubeMask.Value.GetHashCode();
+                hash = hash * 31 + TubeRadius.Value.GetHashCode();
                 return hash;
             }
         }
@@ -245,14 +305,16 @@ namespace SeaPowerNightVision
             switch (Mode.Value)
             {
                 case NightVisionMode.WhitePhosphor:
-                    return new Color(0.82f, 0.88f, 1.00f);
+                    // P45 white phosphor: very slightly cool, almost neutral.
+                    return new Color(0.86f, 0.90f, 0.97f);
                 case NightVisionMode.LowLightBoost:
                     return Color.white;
                 case NightVisionMode.AmberHotSpot:
                     return new Color(1.00f, 0.72f, 0.34f);
                 case NightVisionMode.Gen3Green:
                 default:
-                    return new Color(0.36f, 1.00f, 0.45f);
+                    // P43 phosphor, the yellow-green of a Gen-III tube (~555 nm peak).
+                    return new Color(0.36f, 1.00f, 0.42f);
             }
         }
 
