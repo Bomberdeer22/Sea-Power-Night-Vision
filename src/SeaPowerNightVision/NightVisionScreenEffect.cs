@@ -22,7 +22,6 @@ namespace SeaPowerNightVision
     {
         private const int MaxGainPasses = 4;
 
-        private NightVisionController _controller;
         private NightVisionSettings _settings;
         private Material _material;
         private bool _srpMode;
@@ -31,9 +30,11 @@ namespace SeaPowerNightVision
 
         public Camera TargetCamera { get; private set; }
 
-        internal void Bind(NightVisionController controller, NightVisionSettings settings)
+        /// <summary>0..1 fade weight, driven by the owning filter.</summary>
+        public float Weight { get; set; }
+
+        internal void Bind(NightVisionSettings settings)
         {
-            _controller = controller;
             _settings = settings;
             TargetCamera = GetComponent<Camera>();
         }
@@ -90,12 +91,12 @@ namespace SeaPowerNightVision
 
         private void Render()
         {
-            if (_broken || _controller == null || _settings == null)
+            if (_broken || _settings == null)
             {
                 return;
             }
 
-            var weight = Mathf.Clamp01(_controller.Weight);
+            var weight = Mathf.Clamp01(Weight);
             if (weight <= 0.001f)
             {
                 return;

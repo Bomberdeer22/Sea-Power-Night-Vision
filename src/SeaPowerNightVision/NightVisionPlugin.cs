@@ -14,7 +14,7 @@ namespace SeaPowerNightVision
     {
         public const string PluginGuid = "io.github.bomberdeer22.seapower.nightvision";
         public const string PluginName = "Sea Power Night Vision";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.1.0";
 
         internal static ManualLogSource Log { get; private set; }
         internal static NightVisionSettings Settings { get; private set; }

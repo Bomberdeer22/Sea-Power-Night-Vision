@@ -11,7 +11,11 @@ Press it again and everything returns exactly to how the game rendered it.
 Ctrl + N                 toggle night vision on / off
 Ctrl + Shift + N         cycle tube type (Gen-3 green -> white phosphor -> neutral boost -> amber)
 Ctrl + PageUp / PageDown gain up / down (1.0x .. 8.0x)
+Ctrl + Alt + N           open the in-game settings panel
 ```
+
+The settings panel lets you tune gain, contrast, tint, glow, vignette, grain and the light
+amplification with live sliders while the mission runs — no config-file editing, no restart.
 
 All keys, colours and intensities are configurable — see [Configuration](#configuration).
 
@@ -24,21 +28,25 @@ your monitor brightness:
 
 | Layer | What happens |
 | --- | --- |
-| **Scene amplification** | Ambient light, sky/equator/ground ambient colours and scene light intensities are multiplied while the mode is on, and night haze/fog density is reduced. This reveals unlit hull surfaces, wakes and the horizon — real photons, not just brighter black pixels. Very bright lights (muzzle flashes, explosions, > 8 intensity) are deliberately left alone so they don't bloom into a white screen. |
-| **Tube simulation** | A full-screen composite is drawn at the end of camera rendering: multiplicative gain (applied over several passes so gains above 2x work), an additive shadow lift so true black still glows, a phosphor tint, and optional vignette, scanlines and animated sensor grain. |
+| **A real post-process filter** | The mod injects a global `Volume` into the game's own render pipeline and drives the stock post-processing overrides: post-exposure (gain), saturation and colour filter (phosphor tint), contrast, bloom (halation around running lights and gunfire), vignette and film grain. This is the same machinery the game uses for its own grading, so it is applied to the rendered 3D scene **inside the pipeline, before the interface is composited** — the UI, labels and tactical map are physically untouched. Toggling fades the volume's weight, which is smooth and free. |
+| **Scene amplification** | Ambient light, sky/equator/ground ambient colours and scene light intensities are multiplied while the mode is on, and night haze/fog density is reduced. This reveals unlit hull surfaces, wakes and the horizon — real photons, not just brighter pixels. Very bright lights (muzzle flashes, explosions, > 8 intensity) are deliberately left alone so they don't blow out. |
 
-Two details worth knowing:
+### Filter backends
 
-* The effect is drawn **before screen-space UI**, so the tactical map overlay, labels and menus
-  stay clean and readable while the 3D world is intensified.
-* The screen effect uses Unity's built-in `Hidden/Internal-Colored` shader with immediate-mode
-  `GL` drawing — **no asset bundle and no custom shader**, which keeps the mod a single DLL and
-  makes it far less likely to break on a game update.
+The mod picks the best available path at startup and logs which one it chose:
 
-Everything the mod changes (ambient colours, fog, per-light intensities) is captured before it is
-touched and restored on toggle-off, on scene change and on unload. If the game's own time-of-day
-lighting moves a light while night vision is active, the mod adopts the new value as the baseline
-instead of fighting it.
+1. **Volume post-processing** (URP/HDRP) — the proper one, described above.
+2. **Post Processing Stack v2** — same approach for built-in-pipeline games using the legacy package.
+3. **GL overlay** — a last-resort composite drawn at the end of the *world* camera's rendering
+   (deliberately the scene camera, not the UI camera, so the interface still stays on top).
+
+The first two are found by reflection, so the mod never has to reference URP/HDRP/PPv2 at compile
+time and stays a single dependency-free DLL. Force a specific one with `Backend` in the config if
+you ever need to.
+
+Everything the mod changes is captured before it is touched and restored on toggle-off, on scene
+change and on unload. If the game's own time-of-day lighting moves a light while night vision is
+active, the mod adopts the new value as the baseline instead of fighting it.
 
 ---
 
@@ -104,9 +112,16 @@ On a successful build the DLL is copied into `BepInEx/plugins/SeaPowerNightVisio
 src/SeaPowerNightVision/
   NightVisionPlugin.cs        BepInEx entry point, creates the persistent controller
   NightVisionSettings.cs      every config entry + per-mode tint/gain presets
-  NightVisionController.cs    on/off state, hotkeys, fade, camera tracking, HUD readout
-  NightVisionScreenEffect.cs  the GL composite (gain / lift / tint / vignette / scanlines / grain)
+  NightVisionController.cs    on/off state, hotkeys, fade, backend selection
+  NightVisionUI.cs            in-game settings panel and the NVG status readout
+  INightVisionFilter.cs       the interface each rendering backend implements
+  VolumeFilter.cs             URP/HDRP volume post-processing (the good path)
+  PostProcessV2Filter.cs      legacy Post Processing Stack v2 path
+  OverlayFilter.cs            GL fallback, bound to the world camera only
+  NightVisionScreenEffect.cs  the GL composite used by the fallback
   SceneLightBooster.cs        ambient, light-intensity and fog amplification + exact restore
+  Reflect.cs                  reflection helpers for driving the pipeline without referencing it
+  InputBridge.cs              legacy Input / Input System compatibility for the hotkeys
   AnchorChainEntryPoint.cs    optional Workshop chainloader entry (compiled with /p:AnchorChain=true)
 workshop/_info.ini            Sea Power mod-manager metadata for Workshop uploads
 ```
@@ -124,6 +139,7 @@ workshop/_info.ini            Sea Power mod-manager metadata for Workshop upload
 | `ToggleKey` | `Ctrl + N` | Toggle night vision |
 | `CycleModeKey` | `Ctrl + Shift + N` | Next tube type |
 | `GainUpKey` / `GainDownKey` | `Ctrl + PageUp` / `Ctrl + PageDown` | Gain ±0.5x |
+| `SettingsWindowKey` | `Ctrl + Alt + N` | Open the in-game settings panel |
 
 ### 2. General
 
@@ -140,7 +156,9 @@ workshop/_info.ini            Sea Power mod-manager metadata for Workshop upload
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `Gain` | `3.0` | Brightness multiplication (1–8) |
+| `Gain` | `3.0` | Brightness multiplication (1–8), applied as post-exposure |
+| `Contrast` | `12` | Contrast added while active; helps ships separate from the sea |
+| `TubeGlow` | `0.35` | Bloom/halation around bright sources |
 | `ShadowLift` | `0.06` | Additive glow floor in pure black areas |
 | `TintStrength` | `0.85` | How strongly the phosphor colour is applied |
 | `CustomTintColor` | *(empty)* | Hex override, e.g. `#6BFF8A` |
@@ -155,14 +173,15 @@ only setting with a real frame-time cost).
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `BoostSceneLighting` | `true` | Master switch for the amplification layer |
-| `AmbientBoost` | `4.0` | Ambient light multiplier |
+| `AmbientBoost` | `2.5` | Ambient light multiplier |
 | `LightBoost` | `1.6` | Scene light intensity multiplier |
 | `FogReduction` | `0.35` | How much night haze is cut |
 | `LightScanInterval` | `2.0` | Seconds between rescans for newly spawned lights |
 
 ### 6. Advanced
 
-`AffectAllCameras` (turn on if a secondary/periscope view stays dark), `VerboseLogging`.
+`Backend` (`Auto`, `Volume`, `PostProcessingV2`, `Overlay`, `None`), `AffectAllCameras` (overlay
+backend only — turn on if a secondary/periscope view stays dark), `VerboseLogging`.
 
 ### Suggested presets
 
@@ -189,9 +208,12 @@ SensorNoise = 0.25
 `Sea Power Night Vision 1.0.0 loaded`. If it is missing, BepInEx is not installed correctly
 (`BepInEx/` must sit next to `Sea Power.exe`) or the DLL is not under `BepInEx/plugins/`.
 
-**The world brightens but there is no green tint.** The log will contain a
-`Hidden/Internal-Colored` error — the screen-effect layer is unavailable in that build; the
-lighting amplification still works. Raise `AmbientBoost` to compensate.
+**The tint bleeds onto the UI.** That means the mod fell back to the GL overlay backend. Open the
+settings panel: the bottom line tells you which backend is active, and the log says why the volume
+path was unavailable. Send me that line and I'll add support for whatever the game is using.
+
+**The world brightens but there is no tint at all.** No filter backend could start; only the
+lighting amplification is running. Raise `AmbientBoost` to compensate and check the log.
 
 **A picture-in-picture view stays dark.** Set `AffectAllCameras = true`.
 

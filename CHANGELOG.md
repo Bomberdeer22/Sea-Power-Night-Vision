@@ -3,6 +3,30 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-08-21
+
+### Changed
+- **Night vision is now a real post-process filter, not a screen overlay.** The mod injects a
+  global `Volume` into the game's render pipeline and drives the stock overrides (post-exposure,
+  saturation, colour filter, contrast, bloom, vignette, film grain). Because that runs inside the
+  pipeline, before the interface is composited, the UI is no longer affected at all.
+- Backends are selected automatically: URP/HDRP volume, then Post Processing Stack v2, then the
+  old GL overlay as a last resort. Override with the new `Backend` setting.
+- The GL fallback now binds to the *world* camera rather than the highest-depth camera, so even
+  in fallback mode the interface is drawn on top of the effect instead of underneath it.
+- Default `AmbientBoost` lowered to 2.5 now that exposure is handled properly by the filter.
+
+### Added
+- In-game settings panel (**Ctrl+Alt+N**) with live sliders for gain, contrast, tint, glow,
+  vignette, grain and light amplification, plus tube-type buttons and a reset.
+- `Contrast` and `TubeGlow` (bloom/halation) settings.
+- Input System fallback so hotkeys work regardless of the game's input backend.
+- Startup diagnostics in the log: Unity version, render pipeline, input backend, active filter.
+- `diagnose.cmd` / `diagnose.ps1` for troubleshooting BepInEx installs, including `-FixDoorstop`.
+
+### Removed
+- The `BepInProcess` filter, which could silently prevent the plugin loading.
+
 ## [1.0.0] - 2026-08-20
 
 ### Added
