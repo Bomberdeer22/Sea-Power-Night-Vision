@@ -17,6 +17,10 @@ namespace SeaPowerNightVision
         private bool _autoState;
         private bool _autoInitialised;
 
+        private bool _cursorOverridden;
+        private CursorLockMode _previousLockMode;
+        private bool _previousCursorVisible;
+
         /// <summary>True while the operator has night vision switched on.</summary>
         public bool Active { get; private set; }
 
@@ -114,6 +118,8 @@ namespace SeaPowerNightVision
             UpdateAutoMode();
             UpdateWeight();
 
+            UpdateCursor();
+
             _filter?.Apply(Weight);
 
             if (Weight <= 0.001f && !Active)
@@ -137,6 +143,40 @@ namespace SeaPowerNightVision
             else
             {
                 _lightBooster.Restore();
+            }
+        }
+
+        /// <summary>
+        /// While the settings panel is open the cursor has to be free, otherwise the game keeps it
+        /// locked to the centre of the screen and the panel's buttons can never be clicked.
+        /// The previous state is restored when the panel closes.
+        /// </summary>
+        private void UpdateCursor()
+        {
+            if (_ui.Visible && !_cursorOverridden)
+            {
+                _previousLockMode = Cursor.lockState;
+                _previousCursorVisible = Cursor.visible;
+                _cursorOverridden = true;
+            }
+
+            if (_ui.Visible)
+            {
+                if (Cursor.lockState != CursorLockMode.None)
+                {
+                    Cursor.lockState = CursorLockMode.None;
+                }
+
+                if (!Cursor.visible)
+                {
+                    Cursor.visible = true;
+                }
+            }
+            else if (_cursorOverridden)
+            {
+                Cursor.lockState = _previousLockMode;
+                Cursor.visible = _previousCursorVisible;
+                _cursorOverridden = false;
             }
         }
 
@@ -174,7 +214,7 @@ namespace SeaPowerNightVision
             }
         }
 
-        private static bool IsPressed(BepInEx.Configuration.KeyboardShortcut shortcut)
+        private bool IsPressed(BepInEx.Configuration.KeyboardShortcut shortcut)
         {
             if (shortcut.MainKey == KeyCode.None || !InputBridge.GetKeyDown(shortcut.MainKey))
             {
@@ -185,6 +225,12 @@ namespace SeaPowerNightVision
             {
                 if (!InputBridge.GetKey(modifier))
                 {
+                    if (_settings.VerboseLogging.Value)
+                    {
+                        NightVisionPlugin.Log.LogInfo(
+                            $"Key '{shortcut.MainKey}' was pressed but the modifier '{modifier}' was not held.");
+                    }
+
                     return false;
                 }
             }

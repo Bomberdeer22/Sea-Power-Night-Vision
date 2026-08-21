@@ -43,7 +43,12 @@ namespace SeaPowerNightVision
 
             if (Visible)
             {
+                // Draw (and therefore receive mouse events) in front of anything the game's own
+                // IMGUI might be drawing.
+                var previousDepth = GUI.depth;
+                GUI.depth = -1000;
                 _window = GUILayout.Window(WindowId, _window, DrawWindow, "Night Vision", _windowStyle);
+                GUI.depth = previousDepth;
             }
         }
 
