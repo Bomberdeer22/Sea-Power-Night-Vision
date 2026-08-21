@@ -170,10 +170,10 @@ namespace SeaPowerNightVision
 
             GUILayout.Space(8f);
 
-            var mode = _controller.FilterIsTruePostProcess
+            var backendNote = _controller.FilterIsTruePostProcess
                 ? "Rendering through the game's post-processing — the UI is not affected."
                 : "Fallback overlay in use; see the log for why.";
-            GUILayout.Label(mode, _labelStyle);
+            GUILayout.Label(backendNote, _labelStyle);
             GUILayout.Label($"Backend: {_controller.FilterName}", _labelStyle);
 
             GUILayout.Space(6f);
