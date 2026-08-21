@@ -3,6 +3,7 @@ REM Diagnoses why the night vision plugin isn't loading.
 REM
 REM   diagnose.cmd
 REM   diagnose.cmd -EnableConsole                     turns on the BepInEx debug console
+REM   diagnose.cmd -FixDoorstop                       repairs a BepInEx that never injects
 REM   diagnose.cmd -GameDir "D:\...\Sea Power"
 REM
 REM Writes a full report to diagnose-log.txt next to this file.

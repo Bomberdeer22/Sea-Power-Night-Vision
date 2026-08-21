@@ -9,11 +9,14 @@
 .EXAMPLE
     diagnose.cmd
     diagnose.cmd -EnableConsole      # also switches the BepInEx debug console on
+    diagnose.cmd -FixDoorstop        # moves the injector files out of BepInEx\proxy into the
+                                     # game root so BepInEx actually loads (needs admin)
 #>
 [CmdletBinding()]
 param(
     [string]$GameDir = "",
-    [switch]$EnableConsole
+    [switch]$EnableConsole,
+    [switch]$FixDoorstop
 )
 
 $ErrorActionPreference = "Continue"
@@ -94,9 +97,49 @@ if (Test-Path $doorstopCfg) {
 }
 
 $proxyDir = Join-Path $GameDir "BepInEx\proxy"
+$rootInjector = Test-Path (Join-Path $GameDir "winhttp.dll")
+
 if (Test-Path $proxyDir) {
-    Bad "Found BepInEx\proxy - the injector files are in the wrong place."
-    Info "Move everything from '$proxyDir' into '$GameDir' and relaunch."
+    Info "--- contents of BepInEx\proxy ---"
+    Get-ChildItem $proxyDir -Force | ForEach-Object { Info ("  " + $_.Name) }
+
+    if (-not $rootInjector) {
+        Bad "The injector files are stuck in BepInEx\proxy instead of the game root."
+        Info "This is why BepInEx never starts and no code mod loads."
+
+        if ($FixDoorstop) {
+            Section "Applying doorstop fix"
+            $copied = 0
+            $failed = 0
+            foreach ($file in Get-ChildItem $proxyDir -Force -File) {
+                $destination = Join-Path $GameDir $file.Name
+                try {
+                    Copy-Item $file.FullName $destination -Force -ErrorAction Stop
+                    Good ("Copied " + $file.Name + " -> game root")
+                    $copied++
+                } catch {
+                    Bad ("Could not copy " + $file.Name + ": " + $_.Exception.Message)
+                    $failed++
+                }
+            }
+
+            if ($failed -gt 0) {
+                Bad "Some files could not be copied - this almost always means permissions."
+                Info "Close this window, open Command Prompt AS ADMINISTRATOR, cd to this folder and re-run:"
+                Info "    diagnose.cmd -FixDoorstop"
+            } elseif ($copied -gt 0) {
+                Good "Doorstop files are in place. Launch the game from Steam and try Ctrl+N."
+            }
+        } else {
+            Info "Re-run with the -FixDoorstop switch to move them automatically:"
+            Info "    diagnose.cmd -FixDoorstop"
+        }
+    } else {
+        Info "(A BepInEx\proxy folder exists, but the game root already has winhttp.dll - that's fine.)"
+    }
+} elseif (-not $rootInjector) {
+    Bad "No winhttp.dll in the game root and no BepInEx\proxy folder to recover it from."
+    Info "Reinstall BepInEx 5.4.x (x64, Mono), extracting so BepInEx\ sits next to Sea Power.exe."
 }
 
 Section "BepInEx"
