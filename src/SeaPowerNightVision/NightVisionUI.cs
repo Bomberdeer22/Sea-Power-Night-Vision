@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SeaPowerNightVision
@@ -5,8 +7,9 @@ namespace SeaPowerNightVision
     /// <summary>
     /// The in-game panel (default Ctrl+Alt+N) and the small status readout.
     /// <para>
-    /// Everything here is IMGUI drawn by the mod itself, so it is deliberately the only part of
-    /// the mod that appears on top of the game's interface — and only while you open it.
+    /// The panel is fully usable from the keyboard — arrow keys to select and adjust, Enter to
+    /// activate, Escape to close — because games that capture the mouse for camera control can
+    /// leave IMGUI unable to receive clicks at all. Mouse input works too when the game allows it.
     /// </para>
     /// </summary>
     internal class NightVisionUI
@@ -15,14 +18,18 @@ namespace SeaPowerNightVision
 
         private readonly NightVisionController _controller;
         private readonly NightVisionSettings _settings;
+        private readonly List<PanelRow> _rows = new List<PanelRow>();
 
-        private Rect _window = new Rect(60f, 90f, 340f, 0f);
+        private Rect _window = new Rect(60f, 90f, 360f, 0f);
         private GUIStyle _labelStyle;
         private GUIStyle _headerStyle;
+        private GUIStyle _selectedStyle;
         private GUIStyle _indicatorStyle;
         private GUIStyle _windowStyle;
         private Texture2D _panelBackground;
+        private Texture2D _selectionBackground;
         private bool _stylesReady;
+        private int _selected;
 
         public bool Visible { get; set; }
 
@@ -30,6 +37,216 @@ namespace SeaPowerNightVision
         {
             _controller = controller;
             _settings = settings;
+            BuildRows();
+        }
+
+        /// <summary>One adjustable line in the panel.</summary>
+        private class PanelRow
+        {
+            public string Label;
+            public string Section;
+
+            // Slider rows
+            public Func<float> Get;
+            public Action<float> Set;
+            public float Min;
+            public float Max;
+            public float Step;
+            public string Format = "{0:0.00}";
+
+            // Toggle / action rows
+            public Func<bool> GetToggle;
+            public Action<bool> SetToggle;
+            public Action Activate;
+            public Func<string> ActionLabel;
+
+            public Func<bool> Visible = () => true;
+
+            public bool IsSlider => Get != null;
+            public bool IsToggle => GetToggle != null;
+            public bool IsAction => Activate != null;
+        }
+
+        private void BuildRows()
+        {
+            _rows.Add(new PanelRow
+            {
+                Section = null,
+                Activate = () => _controller.Toggle(),
+                ActionLabel = () => _controller.Active ? "Tubes DOWN  (on)" : "Tubes UP  (off)"
+            });
+
+            _rows.Add(new PanelRow
+            {
+                Section = "Tube type",
+                Activate = () => _controller.CycleMode(),
+                ActionLabel = () => $"< {Describe(_settings.Mode.Value)} >"
+            });
+
+            AddSlider("Image", "Gain", () => _settings.Gain.Value, v => _settings.Gain.Value = v, 1f, 8f, 0.25f, "{0:0.0}x");
+            AddSlider(null, "Contrast", () => _settings.Contrast.Value, v => _settings.Contrast.Value = v, -50f, 60f, 2f, "{0:0}");
+            AddSlider(null, "Tint", () => _settings.TintStrength.Value, v => _settings.TintStrength.Value = v, 0f, 1f, 0.05f, "{0:P0}");
+            AddSlider(null, "Glow", () => _settings.TubeGlow.Value, v => _settings.TubeGlow.Value = v, 0f, 2f, 0.05f, "{0:0.00}");
+
+            _rows.Add(new PanelRow
+            {
+                Section = "Tube artefacts",
+                Label = "Vignette",
+                GetToggle = () => _settings.Vignette.Value,
+                SetToggle = v => _settings.Vignette.Value = v
+            });
+
+            AddSlider(null, "Vignette amount", () => _settings.VignetteStrength.Value, v => _settings.VignetteStrength.Value = v,
+                0f, 1f, 0.05f, "{0:P0}", () => _settings.Vignette.Value);
+
+            AddSlider(null, "Sensor grain", () => _settings.SensorNoise.Value, v => _settings.SensorNoise.Value = v, 0f, 1f, 0.05f, "{0:P0}");
+
+            _rows.Add(new PanelRow
+            {
+                Section = "Light amplification",
+                Label = "Amplify world lighting",
+                GetToggle = () => _settings.BoostSceneLighting.Value,
+                SetToggle = v => _settings.BoostSceneLighting.Value = v
+            });
+
+            AddSlider(null, "Ambient", () => _settings.AmbientBoost.Value, v => _settings.AmbientBoost.Value = v,
+                1f, 12f, 0.25f, "{0:0.0}x", () => _settings.BoostSceneLighting.Value);
+            AddSlider(null, "Lights", () => _settings.LightBoost.Value, v => _settings.LightBoost.Value = v,
+                1f, 6f, 0.1f, "{0:0.0}x", () => _settings.BoostSceneLighting.Value);
+            AddSlider(null, "Cut haze", () => _settings.FogReduction.Value, v => _settings.FogReduction.Value = v,
+                0f, 1f, 0.05f, "{0:P0}", () => _settings.BoostSceneLighting.Value);
+
+            _rows.Add(new PanelRow
+            {
+                Section = "Behaviour",
+                Label = "Auto on at night",
+                GetToggle = () => _settings.AutoEnableAtNight.Value,
+                SetToggle = v => _settings.AutoEnableAtNight.Value = v
+            });
+
+            _rows.Add(new PanelRow
+            {
+                Label = "Show NVG readout",
+                GetToggle = () => _settings.ShowIndicator.Value,
+                SetToggle = v => _settings.ShowIndicator.Value = v
+            });
+
+            _rows.Add(new PanelRow
+            {
+                Section = null,
+                Activate = ResetDefaults,
+                ActionLabel = () => "Reset to defaults"
+            });
+        }
+
+        private void AddSlider(string section, string label, Func<float> get, Action<float> set,
+            float min, float max, float step, string format, Func<bool> visible = null)
+        {
+            _rows.Add(new PanelRow
+            {
+                Section = section,
+                Label = label,
+                Get = get,
+                Set = set,
+                Min = min,
+                Max = max,
+                Step = step,
+                Format = format,
+                Visible = visible ?? (() => true)
+            });
+        }
+
+        /// <summary>
+        /// Keyboard control, called from the controller while the panel is open. This is the
+        /// reliable path: keyboard input reaches the mod even when the game owns the mouse.
+        /// </summary>
+        public void HandleKeyboard()
+        {
+            if (InputBridge.GetKeyDown(KeyCode.Escape))
+            {
+                Visible = false;
+                return;
+            }
+
+            if (InputBridge.GetKeyDown(KeyCode.DownArrow))
+            {
+                Move(1);
+            }
+            else if (InputBridge.GetKeyDown(KeyCode.UpArrow))
+            {
+                Move(-1);
+            }
+
+            var fast = InputBridge.GetKey(KeyCode.LeftShift) || InputBridge.GetKey(KeyCode.RightShift);
+            var scale = fast ? 4f : 1f;
+
+            if (InputBridge.GetKeyDown(KeyCode.RightArrow))
+            {
+                Nudge(+scale);
+            }
+            else if (InputBridge.GetKeyDown(KeyCode.LeftArrow))
+            {
+                Nudge(-scale);
+            }
+
+            if (InputBridge.GetKeyDown(KeyCode.Return) || InputBridge.GetKeyDown(KeyCode.KeypadEnter))
+            {
+                Activate();
+            }
+        }
+
+        private void Move(int direction)
+        {
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                _selected = (_selected + direction + _rows.Count) % _rows.Count;
+                if (_rows[_selected].Visible())
+                {
+                    return;
+                }
+            }
+        }
+
+        private PanelRow Current => _selected >= 0 && _selected < _rows.Count ? _rows[_selected] : null;
+
+        private void Nudge(float scale)
+        {
+            var row = Current;
+            if (row == null)
+            {
+                return;
+            }
+
+            if (row.IsSlider)
+            {
+                row.Set(Mathf.Clamp(row.Get() + row.Step * scale, row.Min, row.Max));
+            }
+            else if (row.IsToggle)
+            {
+                row.SetToggle(!row.GetToggle());
+            }
+            else if (row.IsAction)
+            {
+                row.Activate();
+            }
+        }
+
+        private void Activate()
+        {
+            var row = Current;
+            if (row == null)
+            {
+                return;
+            }
+
+            if (row.IsAction)
+            {
+                row.Activate();
+            }
+            else if (row.IsToggle)
+            {
+                row.SetToggle(!row.GetToggle());
+            }
         }
 
         public void Draw(float weight)
@@ -41,15 +258,15 @@ namespace SeaPowerNightVision
                 DrawIndicator(weight);
             }
 
-            if (Visible)
+            if (!Visible)
             {
-                // Draw (and therefore receive mouse events) in front of anything the game's own
-                // IMGUI might be drawing.
-                var previousDepth = GUI.depth;
-                GUI.depth = -1000;
-                _window = GUILayout.Window(WindowId, _window, DrawWindow, "Night Vision", _windowStyle);
-                GUI.depth = previousDepth;
+                return;
             }
+
+            var previousDepth = GUI.depth;
+            GUI.depth = -1000;
+            _window = GUILayout.Window(WindowId, _window, DrawWindow, "Night Vision", _windowStyle);
+            GUI.depth = previousDepth;
         }
 
         private void EnsureStyles()
@@ -59,10 +276,8 @@ namespace SeaPowerNightVision
                 return;
             }
 
-            _panelBackground = new Texture2D(1, 1);
-            _panelBackground.SetPixel(0, 0, new Color(0.04f, 0.07f, 0.05f, 0.94f));
-            _panelBackground.Apply();
-            _panelBackground.hideFlags = HideFlags.HideAndDontSave;
+            _panelBackground = MakeTexture(new Color(0.04f, 0.07f, 0.05f, 0.95f));
+            _selectionBackground = MakeTexture(new Color(0.15f, 0.35f, 0.20f, 0.95f));
 
             _windowStyle = new GUIStyle(GUI.skin.window);
             _windowStyle.normal.background = _panelBackground;
@@ -78,6 +293,11 @@ namespace SeaPowerNightVision
             _headerStyle = new GUIStyle(_labelStyle) { fontStyle = FontStyle.Bold };
             _headerStyle.normal.textColor = new Color(0.55f, 1f, 0.68f);
 
+            _selectedStyle = new GUIStyle(_labelStyle) { fontStyle = FontStyle.Bold };
+            _selectedStyle.normal.textColor = Color.white;
+            _selectedStyle.normal.background = _selectionBackground;
+            _selectedStyle.padding = new RectOffset(4, 4, 1, 1);
+
             _indicatorStyle = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 13,
@@ -86,6 +306,15 @@ namespace SeaPowerNightVision
             };
 
             _stylesReady = true;
+        }
+
+        private static Texture2D MakeTexture(Color color)
+        {
+            var texture = new Texture2D(1, 1);
+            texture.SetPixel(0, 0, color);
+            texture.Apply();
+            texture.hideFlags = HideFlags.HideAndDontSave;
+            return texture;
         }
 
         private void DrawIndicator(float weight)
@@ -102,100 +331,38 @@ namespace SeaPowerNightVision
 
         private void DrawWindow(int id)
         {
-            GUILayout.Space(2f);
+            GUILayout.Label("Arrow keys to select and adjust · Enter to toggle · Esc to close", _labelStyle);
+            GUILayout.Space(4f);
 
-            // Power
-            GUILayout.BeginHorizontal();
-            var buttonLabel = _controller.Active ? "Tubes DOWN  (on)" : "Tubes UP  (off)";
-            if (GUILayout.Button(buttonLabel, GUILayout.Height(28f)))
+            for (var i = 0; i < _rows.Count; i++)
             {
-                _controller.Toggle();
-            }
-            GUILayout.EndHorizontal();
-
-            GUILayout.Space(6f);
-            GUILayout.Label("Tube type", _headerStyle);
-
-            // Mode selector
-            var modes = new[]
-            {
-                NightVisionMode.Gen3Green,
-                NightVisionMode.WhitePhosphor,
-                NightVisionMode.LowLightBoost,
-                NightVisionMode.AmberHotSpot
-            };
-
-            GUILayout.BeginHorizontal();
-            foreach (var mode in modes)
-            {
-                var selected = _settings.Mode.Value == mode;
-                var style = selected ? GUI.skin.box : GUI.skin.button;
-                if (GUILayout.Button(Describe(mode), style, GUILayout.Height(24f)) && !selected)
+                var row = _rows[i];
+                if (!row.Visible())
                 {
-                    _controller.SetMode(mode);
+                    continue;
                 }
+
+                if (!string.IsNullOrEmpty(row.Section))
+                {
+                    GUILayout.Space(6f);
+                    GUILayout.Label(row.Section, _headerStyle);
+                }
+
+                DrawRow(row, i == _selected, i);
             }
-            GUILayout.EndHorizontal();
-
-            GUILayout.Space(8f);
-            GUILayout.Label("Image", _headerStyle);
-
-            _settings.Gain.Value = Slider("Gain", _settings.Gain.Value, 1f, 8f, "{0:0.0}x");
-            _settings.Contrast.Value = Slider("Contrast", _settings.Contrast.Value, -50f, 60f, "{0:0}");
-            _settings.TintStrength.Value = Slider("Tint", _settings.TintStrength.Value, 0f, 1f, "{0:P0}");
-            _settings.TubeGlow.Value = Slider("Glow / halation", _settings.TubeGlow.Value, 0f, 2f, "{0:0.00}");
-
-            GUILayout.Space(8f);
-            GUILayout.Label("Tube artefacts", _headerStyle);
-
-            _settings.Vignette.Value = GUILayout.Toggle(_settings.Vignette.Value, " Vignette");
-            if (_settings.Vignette.Value)
-            {
-                _settings.VignetteStrength.Value = Slider("Amount", _settings.VignetteStrength.Value, 0f, 1f, "{0:P0}");
-            }
-
-            _settings.SensorNoise.Value = Slider("Sensor grain", _settings.SensorNoise.Value, 0f, 1f, "{0:P0}");
-
-            GUILayout.Space(8f);
-            GUILayout.Label("Light amplification", _headerStyle);
-
-            _settings.BoostSceneLighting.Value = GUILayout.Toggle(_settings.BoostSceneLighting.Value, " Amplify world lighting");
-            if (_settings.BoostSceneLighting.Value)
-            {
-                _settings.AmbientBoost.Value = Slider("Ambient", _settings.AmbientBoost.Value, 1f, 12f, "{0:0.0}x");
-                _settings.LightBoost.Value = Slider("Lights", _settings.LightBoost.Value, 1f, 6f, "{0:0.0}x");
-                _settings.FogReduction.Value = Slider("Cut haze", _settings.FogReduction.Value, 0f, 1f, "{0:P0}");
-            }
-
-            GUILayout.Space(8f);
-            GUILayout.Label("Behaviour", _headerStyle);
-
-            _settings.AutoEnableAtNight.Value = GUILayout.Toggle(_settings.AutoEnableAtNight.Value, " Switch on automatically at night");
-            _settings.ShowIndicator.Value = GUILayout.Toggle(_settings.ShowIndicator.Value, " Show NVG readout");
 
             GUILayout.Space(8f);
 
             var backendNote = _controller.FilterIsTruePostProcess
-                ? "Rendering through the game's post-processing — the UI is not affected."
-                : "Fallback overlay in use; see the log for why.";
+                ? "Running as a camera image effect — the UI is not affected."
+                : "No screen filter active; see the log.";
             GUILayout.Label(backendNote, _labelStyle);
             GUILayout.Label($"Backend: {_controller.FilterName}", _labelStyle);
 
-            GUILayout.Space(6f);
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Reset defaults"))
-            {
-                ResetDefaults();
-            }
-            if (GUILayout.Button("Close"))
-            {
-                Visible = false;
-            }
-            GUILayout.EndHorizontal();
-
+            GUILayout.Space(4f);
             GUILayout.Label($"Toggle {_settings.ToggleKey.Value} · cycle {_settings.CycleModeKey.Value} · this panel {_settings.SettingsWindowKey.Value}", _labelStyle);
 
-            if (_settings.VerboseLogging.Value && Event.current.type == EventType.Repaint)
+            if (_settings.VerboseLogging.Value)
             {
                 GUILayout.Label($"mouse {Input.mousePosition} · cursor {Cursor.lockState}", _labelStyle);
             }
@@ -203,14 +370,53 @@ namespace SeaPowerNightVision
             GUI.DragWindow(new Rect(0f, 0f, 10000f, 20f));
         }
 
-        private float Slider(string label, float value, float min, float max, string format)
+        private void DrawRow(PanelRow row, bool selected, int index)
         {
+            var style = selected ? _selectedStyle : _labelStyle;
+
+            if (row.IsAction)
+            {
+                if (GUILayout.Button(row.ActionLabel(), GUILayout.Height(24f)))
+                {
+                    _selected = index;
+                    row.Activate();
+                }
+
+                if (selected)
+                {
+                    var rect = GUILayoutUtility.GetLastRect();
+                    GUI.Label(new Rect(rect.x - 10f, rect.y + 2f, 12f, 20f), ">", _headerStyle);
+                }
+
+                return;
+            }
+
             GUILayout.BeginHorizontal();
-            GUILayout.Label(label, _labelStyle, GUILayout.Width(110f));
-            var result = GUILayout.HorizontalSlider(value, min, max);
-            GUILayout.Label(string.Format(format, result), _labelStyle, GUILayout.Width(52f));
+
+            if (row.IsToggle)
+            {
+                GUILayout.Label(selected ? "> " + row.Label : "  " + row.Label, style, GUILayout.Width(200f));
+                var value = GUILayout.Toggle(row.GetToggle(), row.GetToggle() ? " on" : " off");
+                if (value != row.GetToggle())
+                {
+                    _selected = index;
+                    row.SetToggle(value);
+                }
+            }
+            else
+            {
+                GUILayout.Label(selected ? "> " + row.Label : "  " + row.Label, style, GUILayout.Width(150f));
+                var value = GUILayout.HorizontalSlider(row.Get(), row.Min, row.Max);
+                if (!Mathf.Approximately(value, row.Get()))
+                {
+                    _selected = index;
+                    row.Set(value);
+                }
+
+                GUILayout.Label(string.Format(row.Format, row.Get()), _labelStyle, GUILayout.Width(52f));
+            }
+
             GUILayout.EndHorizontal();
-            return result;
         }
 
         private void ResetDefaults()
@@ -231,10 +437,10 @@ namespace SeaPowerNightVision
         {
             switch (mode)
             {
-                case NightVisionMode.WhitePhosphor: return "White";
-                case NightVisionMode.LowLightBoost: return "Clear";
+                case NightVisionMode.WhitePhosphor: return "White phosphor";
+                case NightVisionMode.LowLightBoost: return "Clear (no tint)";
                 case NightVisionMode.AmberHotSpot: return "Amber";
-                default: return "Gen-3";
+                default: return "Gen-3 green";
             }
         }
     }

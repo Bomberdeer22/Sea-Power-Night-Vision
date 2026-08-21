@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-08-21
+
+### Fixed
+- The settings panel can now be driven entirely from the **keyboard** (arrow keys to select and
+  adjust, Shift for larger steps, Enter to toggle, Escape to close). Sea Power captures the mouse
+  for camera control, which can stop IMGUI receiving clicks at all, so the panel no longer depends
+  on the mouse working.
+- The cursor is now also freed in `LateUpdate` and again in `OnGUI`, after the game's own scripts
+  have re-locked it, which is what makes mouse control work where it can work at all.
+
 ## [1.2.0] - 2026-08-21
 
 ### Changed

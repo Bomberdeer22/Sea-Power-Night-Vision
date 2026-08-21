@@ -192,6 +192,12 @@ namespace SeaPowerNightVision
                 return;
             }
 
+            if (_ui.Visible)
+            {
+                // Arrow keys / Enter / Escape drive the panel while it is open.
+                _ui.HandleKeyboard();
+            }
+
             if (IsPressed(_settings.CycleModeKey.Value))
             {
                 CycleMode();
@@ -365,8 +371,38 @@ namespace SeaPowerNightVision
             return Mathf.Clamp01(ambient + directional * 0.5f);
         }
 
+        /// <summary>
+        /// Games that capture the mouse usually re-lock the cursor in their own Update, which
+        /// would undo what we did earlier in the frame. LateUpdate runs after all of those, so
+        /// forcing it here is what actually sticks.
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (!_ui.Visible)
+            {
+                return;
+            }
+
+            if (Cursor.lockState != CursorLockMode.None)
+            {
+                Cursor.lockState = CursorLockMode.None;
+            }
+
+            if (!Cursor.visible)
+            {
+                Cursor.visible = true;
+            }
+        }
+
         private void OnGUI()
         {
+            // Last chance to free the cursor before IMGUI hit-tests this frame's mouse events.
+            if (_ui.Visible && Cursor.lockState != CursorLockMode.None)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+
             _ui.Draw(Weight);
         }
     }

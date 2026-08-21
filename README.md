@@ -15,7 +15,10 @@ Ctrl + Alt + N           open the in-game settings panel
 ```
 
 The settings panel lets you tune gain, contrast, tint, glow, vignette, grain and the light
-amplification with live sliders while the mission runs — no config-file editing, no restart.
+amplification while the mission runs — no config-file editing, no restart. It is driven by the
+**keyboard** (arrow keys select and adjust, Shift for bigger steps, Enter toggles, Escape closes)
+as well as the mouse, because Sea Power captures the mouse for camera control and that can stop
+IMGUI panels receiving clicks.
 
 All keys, colours and intensities are configurable — see [Configuration](#configuration).
 
